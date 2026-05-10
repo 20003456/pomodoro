@@ -59,28 +59,32 @@ const MODE_META: Record<
     ready: string;
     running: string;
     complete: string;
+    code: string;
     settingKey: keyof Pick<Settings, "focusMinutes" | "shortMinutes" | "longMinutes">;
   }
 > = {
   focus: {
     label: "专注",
-    ready: "准备专注",
-    running: "专注中",
+    ready: "系统待命：准备专注",
+    running: "专注运行中",
     complete: "专注完成",
+    code: "FOCUS",
     settingKey: "focusMinutes",
   },
   short: {
     label: "短休息",
-    ready: "准备短休息",
-    running: "短休息中",
+    ready: "系统待命：准备短休息",
+    running: "短休息运行中",
     complete: "短休息结束",
+    code: "SHORT",
     settingKey: "shortMinutes",
   },
   long: {
     label: "长休息",
-    ready: "准备长休息",
-    running: "长休息中",
+    ready: "系统待命：准备长休息",
+    running: "长休息运行中",
     complete: "长休息结束",
+    code: "LONG",
     settingKey: "longMinutes",
   },
 };
@@ -272,6 +276,9 @@ function App() {
   const progress = total <= 0 ? 0 : remaining / total;
   const activeMeta = MODE_META[mode];
   const statusLabel = isRunning ? activeMeta.running : activeMeta.ready;
+  const elapsedPercent = Math.round((1 - progress) * 100);
+  const cycleTarget = settings.longEvery;
+  const cycleProgress = completedFocus % cycleTarget || (completedFocus > 0 ? cycleTarget : 0);
   const themeClass = mode === "focus" ? "" : `theme-${mode}`;
 
   const persistState = useCallback(() => {
@@ -493,15 +500,16 @@ function App() {
 
   return (
     <main className={`app-shell ${themeClass}`} aria-labelledby="app-title">
-      <section className="timer-panel">
+      <section className="timer-panel panel-frame">
+        <div className="panel-scanline" aria-hidden="true"></div>
         <div className="topbar">
-          <div>
-            <p className="eyebrow">Pomodoro</p>
+          <div className="brand-block">
+            <p className="eyebrow">Pomodoro Control</p>
             <h1 id="app-title">番茄钟</h1>
           </div>
           <div className="rounds" aria-live="polite">
+            <small>今日完成</small>
             <span>{completedFocus}</span>
-            <small>已完成</small>
           </div>
         </div>
 
@@ -515,12 +523,31 @@ function App() {
               aria-selected={option === mode}
               onClick={() => applyMode(option, false)}
             >
-              {MODE_META[option].label}
+              <span>{MODE_META[option].label}</span>
+              <small>{MODE_META[option].code}</small>
             </button>
           ))}
         </div>
 
+        <div className="system-strip" aria-label="当前状态">
+          <div>
+            <span className={`status-dot ${isRunning ? "online" : ""}`} aria-hidden="true"></span>
+            <span>{statusLabel}</span>
+          </div>
+          <div>
+            <span>进度</span>
+            <strong>{elapsedPercent}%</strong>
+          </div>
+          <div>
+            <span>长休息周期</span>
+            <strong>
+              {cycleProgress}/{cycleTarget}
+            </strong>
+          </div>
+        </div>
+
         <div className="timer-stage" aria-live="polite">
+          <div className="radar-grid" aria-hidden="true"></div>
           <svg className="progress-ring" viewBox="0 0 240 240" aria-hidden="true">
             <circle className="ring-bg" cx="120" cy="120" r={RING_RADIUS}></circle>
             <circle
@@ -533,14 +560,21 @@ function App() {
             ></circle>
           </svg>
           <div className="time-readout">
+            <small>{activeMeta.code}</small>
             <span>{timeText}</span>
-            <small>{statusLabel}</small>
+            <em>{statusLabel}</em>
           </div>
         </div>
 
         <div className="controls" aria-label="计时控制">
-          <button className="icon-btn" type="button" title="重置" aria-label="重置" onClick={resetTimer}>
-            <RotateCcw aria-hidden="true" size={26} strokeWidth={2.4} />
+          <button
+            className="icon-btn"
+            type="button"
+            title="重置"
+            aria-label="重置"
+            onClick={resetTimer}
+          >
+            <RotateCcw aria-hidden="true" size={25} strokeWidth={2.3} />
           </button>
           <button className="primary-btn" type="button" onClick={toggleTimer}>
             {isRunning ? (
@@ -550,16 +584,25 @@ function App() {
             )}
             <span>{isRunning ? "暂停" : "开始"}</span>
           </button>
-          <button className="icon-btn" type="button" title="跳过" aria-label="跳过" onClick={() => completeSession(false)}>
-            <SkipForward aria-hidden="true" size={27} strokeWidth={2.4} />
+          <button
+            className="icon-btn"
+            type="button"
+            title="跳过"
+            aria-label="跳过"
+            onClick={() => completeSession(false)}
+          >
+            <SkipForward aria-hidden="true" size={26} strokeWidth={2.3} />
           </button>
         </div>
       </section>
 
       <aside className="settings-panel" aria-label="设置">
-        <div className="setting-card">
+        <section className="setting-card panel-frame">
           <div className="setting-header">
-            <h2>时长</h2>
+            <div>
+              <p className="panel-kicker">Duration</p>
+              <h2>时长配置</h2>
+            </div>
             <span>分钟</span>
           </div>
 
@@ -609,9 +652,15 @@ function App() {
               onChange={(event) => updateNumberSetting("longEvery", event.currentTarget.valueAsNumber)}
             />
           </label>
-        </div>
+        </section>
 
-        <div className="setting-card compact">
+        <section className="setting-card compact panel-frame">
+          <div className="setting-header tight">
+            <div>
+              <p className="panel-kicker">Automation</p>
+              <h2>自动化</h2>
+            </div>
+          </div>
           <label className="switch-row">
             <span>自动进入下一轮</span>
             <input
@@ -636,10 +685,15 @@ function App() {
               onChange={(event) => void updateNotifySetting(event.currentTarget.checked)}
             />
           </label>
-        </div>
+        </section>
 
-        <div className="session-log" aria-label="记录">
-          <h2>今日记录</h2>
+        <section className="session-log panel-frame" aria-label="记录">
+          <div className="setting-header tight">
+            <div>
+              <p className="panel-kicker">Session Log</p>
+              <h2>今日记录</h2>
+            </div>
+          </div>
           {logs.length === 0 ? (
             <p className="empty-log">暂无记录</p>
           ) : (
@@ -657,7 +711,7 @@ function App() {
               ))}
             </ul>
           )}
-        </div>
+        </section>
       </aside>
     </main>
   );
